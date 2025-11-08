@@ -1,0 +1,70 @@
+# Flutter / Dart
+**/.dart_tool/
+**/.packages
+**/.flutter-plugins*
+**/.metadata
+**/build/
+**/pubspec.lock
+
+# Android
+**/android/.gradle/
+**/android/.idea/
+**/android/local.properties
+**/android/**/build/
+**/android/app/release/
+**/android/app/release/*.keystore
+**/android/app/release/*.jks
+**/android/app/*.keystore
+**/android/app/*.jks
+**/android/app/libs/
+**/android/app/src/debug/
+**/android/app/src/profile/
+**/android/app/build/outputs/
+**/*.apk
+**/*.aab
+
+# iOS
+**/ios/.generated/
+**/ios/Flutter/
+**/ios/Pods/
+**/ios/Runner.xcworkspace/
+**/ios/Runner.xcodeproj/project.xcworkspace/
+**/ios/build/
+**/*.ipa
+
+# Web
+**/build/web/
+
+# Windows/macOS/Linux builds
+**/windows/**/x64/
+**/windows/**/x86/
+**/macos/Flutter/ephemeral/
+**/linux/**/build/
+
+# Python / Flask
+**/.venv/
+**/venv/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/*.log
+**/*.sqlite
+**/*.sqlite3
+**/instance/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Runtime data
+**/*.db
+**/*.db-shm
+**/*.db-wal
+**/*.lock
+
+# Node/npm (if any)
+**/node_modules/

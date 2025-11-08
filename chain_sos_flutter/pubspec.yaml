@@ -1,0 +1,30 @@
+name: chain_sos_flutter
+description: ChainSOS - Emergency SOS relay over BLE and HTTP
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  http: ^1.2.2
+  connectivity_plus: ^6.0.3
+  geolocator: ^12.0.0
+  flutter_blue_plus: ^1.33.5
+  shared_preferences: ^2.3.2
+  sqflite: ^2.3.3+1
+  path: ^1.9.0
+  provider: ^6.1.2
+  permission_handler: ^11.3.1
+  flutter_ble_peripheral: ^1.2.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+flutter:
+  uses-material-design: true
