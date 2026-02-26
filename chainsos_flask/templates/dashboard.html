@@ -102,6 +102,73 @@
         font-weight: 600;
         color: #333;
       }
+      .tracking-modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0,0,0,0.5);
+      }
+      .tracking-content {
+        background-color: white;
+        margin: 50px auto;
+        padding: 20px;
+        border-radius: 12px;
+        width: 90%;
+        max-width: 800px;
+        max-height: 80vh;
+        overflow-y: auto;
+      }
+      .close {
+        color: #aaa;
+        float: right;
+        font-size: 28px;
+        font-weight: bold;
+        cursor: pointer;
+      }
+      .close:hover {
+        color: #000;
+      }
+      #trackingMap {
+        height: 400px;
+        border-radius: 8px;
+        margin: 16px 0;
+      }
+      .tracking-info {
+        background: #f8f9fa;
+        padding: 16px;
+        border-radius: 8px;
+        margin: 16px 0;
+      }
+      .tracking-path {
+        stroke: #b71c1c;
+        stroke-width: 3;
+        fill: none;
+      }
+      .clickable-row {
+        cursor: pointer;
+        transition: background-color 0.2s;
+      }
+      .clickable-row:hover {
+        background-color: #e3f2fd !important;
+      }
+      .live-indicator {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        background: #4caf50;
+        border-radius: 50%;
+        margin-left: 8px;
+        animation: pulse 2s infinite;
+      }
+      @keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.3; }
+        100% { opacity: 1; }
+      }
     </style>
   </head>
   <body>
@@ -123,17 +190,35 @@
         </thead>
         <tbody>
           {% for a in alerts %}
-          <tr>
-            <td><span class="pill">{{ a['packet_id'] }}</span></td>
-            <td>{{ a['device_id'] }}</td>
-            <td>{{ a['formatted_time'] }}</td>
-            <td>{{ '%.6f'|format(a['lat']) }}</td>
-            <td>{{ '%.6f'|format(a['lon']) }}</td>
-            <td>{{ a['message'] }}</td>
+          <tr class="clickable-row" onclick="showTracking('{{ a.packet_id }}', '{{ a.device_id }}')">
+            <td>
+              <span class="pill">{{ a.packet_id }}</span>
+              <span class="live-indicator" title="Click to view live tracking"></span>
+            </td>
+            <td>{{ a.device_id }}</td>
+            <td>{{ a.formatted_time }}</td>
+            <td>{{ '%.6f'|format(a.lat) }}</td>
+            <td>{{ '%.6f'|format(a.lon) }}</td>
+            <td>{{ a.message }}</td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
+    </div>
+
+    <!-- Tracking Modal -->
+    <div id="trackingModal" class="tracking-modal">
+      <div class="tracking-content">
+        <span class="close" onclick="closeTracking()">&times;</span>
+        <h2>Live Tracking - <span id="trackingSosId"></span></h2>
+        <div class="tracking-info">
+          <p><strong>Device:</strong> <span id="trackingDevice"></span></p>
+          <p><strong>Status:</strong> <span id="trackingStatus"></span></p>
+          <p><strong>Last Update:</strong> <span id="lastUpdate"></span></p>
+        </div>
+        <div id="trackingMap"></div>
+        <div id="trackingStats"></div>
+      </div>
     </div>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
@@ -170,6 +255,155 @@
         }
       } catch (error) {
         console.error('Error initializing map:', error);
+      }
+
+      let trackingMap = null;
+      let trackingInterval = null;
+
+      function showTracking(sosId, deviceId) {
+        document.getElementById('trackingSosId').textContent = sosId;
+        document.getElementById('trackingDevice').textContent = deviceId;
+        document.getElementById('trackingModal').style.display = 'block';
+        
+        // Initialize tracking map
+        if (!trackingMap) {
+          trackingMap = L.map('trackingMap').setView([20.0, 78.0], 10);
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
+          }).addTo(trackingMap);
+        }
+        
+        loadTrackingData(sosId);
+        
+        // Auto-refresh tracking data every 30 seconds
+        if (trackingInterval) clearInterval(trackingInterval);
+        trackingInterval = setInterval(() => loadTrackingData(sosId), 30000);
+      }
+
+      function closeTracking() {
+        document.getElementById('trackingModal').style.display = 'none';
+        if (trackingInterval) {
+          clearInterval(trackingInterval);
+          trackingInterval = null;
+        }
+      }
+
+      async function loadTrackingData(sosId) {
+        try {
+          const response = await fetch(`/tracking/${sosId}`);
+          const data = await response.json();
+          
+          if (data.tracking_data && data.tracking_data.length > 0) {
+            displayTrackingData(data.tracking_data);
+          } else {
+            document.getElementById('trackingStatus').textContent = 'No tracking data available';
+          }
+        } catch (error) {
+          console.error('Error loading tracking data:', error);
+          document.getElementById('trackingStatus').textContent = 'Error loading tracking data';
+        }
+      }
+
+      function displayTrackingData(trackingData) {
+        // Clear existing markers and path
+        trackingMap.eachLayer(layer => {
+          if (layer instanceof L.Marker || layer instanceof L.Polyline) {
+            trackingMap.removeLayer(layer);
+          }
+        });
+
+        const locations = trackingData.filter(point => point.lat && point.lon);
+        
+        if (locations.length === 0) {
+          document.getElementById('trackingStatus').textContent = 'No location data';
+          return;
+        }
+
+        // Create path line
+        const pathCoords = locations.map(loc => [loc.lat, loc.lon]);
+        const pathLine = L.polyline(pathCoords, {
+          color: '#b71c1c',
+          weight: 3,
+          opacity: 0.8
+        }).addTo(trackingMap);
+
+        // Add markers for each location
+        locations.forEach((location, index) => {
+          const isLatest = index === locations.length - 1;
+          const markerColor = isLatest ? '#4caf50' : '#b71c1c';
+          const markerSize = isLatest ? 10 : 6;
+          
+          const marker = L.circleMarker([location.lat, location.lon], {
+            radius: markerSize,
+            fillColor: markerColor,
+            color: '#fff',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.8
+          }).addTo(trackingMap);
+
+          const popupContent = `
+            <b>${location.packet_id}</b><br/>
+            Type: ${location.type}<br/>
+            Time: ${new Date(location.timestamp * 1000).toLocaleString()}<br/>
+            Confidence: ${location.confidence || 'HIGH'}
+          `;
+          
+          marker.bindPopup(popupContent);
+          
+          if (isLatest) {
+            marker.openPopup();
+          }
+        });
+
+        // Fit map to show all tracking points
+        if (pathCoords.length > 0) {
+          trackingMap.fitBounds(pathCoords, { padding: [50, 50] });
+        }
+
+        // Update stats
+        const latestPoint = locations[locations.length - 1];
+        const trackPackets = locations.filter(loc => loc.type === 'TRACK_PACKET').length;
+        const heartbeatPackets = locations.filter(loc => loc.type === 'HEARTBEAT_PACKET').length;
+        
+        document.getElementById('trackingStatus').innerHTML = `
+          <span style="color: #4caf50;">● LIVE</span> - 
+          ${trackPackets} track points, ${heartbeatPackets} heartbeats
+        `;
+        document.getElementById('lastUpdate').textContent = 
+          new Date(latestPoint.timestamp * 1000).toLocaleString();
+        
+        document.getElementById('trackingStats').innerHTML = `
+          <div class="tracking-info">
+            <h4>Tracking Statistics</h4>
+            <p><strong>Total Packets:</strong> ${trackingData.length}</p>
+            <p><strong>Track Packets:</strong> ${trackPackets}</p>
+            <p><strong>Heartbeat Packets:</strong> ${heartbeatPackets}</p>
+            <p><strong>Duration:</strong> ${formatDuration(trackingData[0].timestamp, latestPoint.timestamp)}</p>
+            <p><strong>Latest Confidence:</strong> ${latestPoint.confidence || 'HIGH'}</p>
+          </div>
+        `;
+      }
+
+      function formatDuration(startTs, endTs) {
+        const duration = endTs - startTs;
+        const hours = Math.floor(duration / 3600);
+        const minutes = Math.floor((duration % 3600) / 60);
+        
+        if (hours > 0) {
+          return `${hours}h ${minutes}m`;
+        } else {
+          return `${minutes}m`;
+        }
+      }
+
+      // Close modal when clicking outside
+      window.onclick = function(event) {
+        const modal = document.getElementById('trackingModal');
+        if (event.target === modal) {
+          closeTracking();
+        }
       }
     </script>
   </body>

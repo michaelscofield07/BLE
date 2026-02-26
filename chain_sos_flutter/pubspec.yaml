@@ -1,5 +1,5 @@
 name: chain_sos_flutter
-description: ChainSOS - Emergency SOS relay over BLE and HTTP
+description: ChainSOS
 publish_to: 'none'
 version: 1.0.0+1
 

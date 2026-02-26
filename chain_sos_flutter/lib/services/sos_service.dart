@@ -4,14 +4,18 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import '../services/storage_service.dart';
+import '../services/location_tracking_manager.dart';
+import '../services/intelligent_sos_service.dart';
 
 class SosPacket {
   final String packetId;
   final String deviceId;
-  final int roundedTs; // seconds rounded to 30s
+  final int roundedTs;
   final double lat;
   final double lon;
   final String message;
+  final int hopCount;
+  final int maxHops;
 
   SosPacket({
     required this.packetId,
@@ -20,7 +24,31 @@ class SosPacket {
     required this.lat,
     required this.lon,
     required this.message,
+    this.hopCount = 0,
+    this.maxHops = 13,
   });
+
+  SosPacket copyWith({
+    String? packetId,
+    String? deviceId,
+    int? roundedTs,
+    double? lat,
+    double? lon,
+    String? message,
+    int? hopCount,
+    int? maxHops,
+  }) {
+    return SosPacket(
+      packetId: packetId ?? this.packetId,
+      deviceId: deviceId ?? this.deviceId,
+      roundedTs: roundedTs ?? this.roundedTs,
+      lat: lat ?? this.lat,
+      lon: lon ?? this.lon,
+      message: message ?? this.message,
+      hopCount: hopCount ?? this.hopCount,
+      maxHops: maxHops ?? this.maxHops,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'packet_id': packetId,
@@ -29,25 +57,38 @@ class SosPacket {
         'lat': lat,
         'lon': lon,
         'message': message,
+        'hop_count': hopCount,
+        'max_hops': maxHops,
       };
 
-  static SosPacket fromJson(Map<String, dynamic> json) => SosPacket(
-        packetId: json['packet_id'] as String,
-        deviceId: json['device_id'] as String,
-        roundedTs: (json['timestamp'] as num).toInt(),
+  factory SosPacket.fromJson(Map<String, dynamic> json) => SosPacket(
+        packetId: json['packet_id'],
+        deviceId: json['device_id'],
+        roundedTs: json['timestamp'],
         lat: (json['lat'] as num).toDouble(),
         lon: (json['lon'] as num).toDouble(),
-        message: json['message'] as String,
+        message: json['message'],
+        hopCount: json['hop_count'] ?? 0,
+        maxHops: json['max_hops'] ?? 13,
       );
 }
 
 class SosService extends ChangeNotifier {
   final StorageService storageService;
-  bool forceOnline = false; // testing toggle
-  String backendBaseUrl = 'http://192.168.43.47:5000';
+  LocationTrackingManager? _trackingManager;
+  bool forceOnline = false;
+  String backendBaseUrl = 'http://10.67.183.231:5000';
   final List<String> logs = <String>[];
 
   SosService({required this.storageService});
+
+  LocationTrackingManager get trackingManager {
+    _trackingManager ??= LocationTrackingManager(
+      storageService: storageService,
+      sosService: this,
+    );
+    return _trackingManager!;
+  }
   void setForceOnline(bool value) {
     forceOnline = value;
     notifyListeners();
@@ -127,7 +168,8 @@ class SosService extends ChangeNotifier {
       attempt += 1;
       try {
         final online = await _hasInternet();
-        logs.add('Forward attempt $attempt (${online ? "Device is Online" : "Device is Offline"}) for ${packet.packetId}');
+        logs.add(
+            'Forward attempt $attempt (${online ? "Device is Online" : "Device is Offline"}) for ${packet.packetId}');
         notifyListeners();
         await sendPacketOnline(packet);
         return;
@@ -146,13 +188,29 @@ class SosService extends ChangeNotifier {
     try {
       final packet = await createPacket(message: message);
       final online = await _hasInternet();
-      logs.add('Generated packet ${packet.packetId}. ${online ? "Device is Online" : "Device is Offline"}');
+      logs.add(
+          'Generated packet ${packet.packetId}. ${online ? "Device is Online" : "Device is Offline"}');
       notifyListeners();
+      
+      // Get intelligent SOS decision
+      final decision = await IntelligentSosService.getSosDecision();
+      logs.add('Intelligent decision: ${decision['reason']}');
+      
+      // Start live location tracking
+      await trackingManager.startTracking(packet.packetId);
+      logs.add('Started live location tracking for ${packet.packetId}');
+      
       if (online) {
         await sendPacketOnline(packet);
       } else {
-        if (onOffline != null) {
-          await onOffline(packet);
+        // Use intelligent forwarding for offline
+        if (decision['shouldForward'] == true) {
+          if (onOffline != null) {
+            await onOffline(packet);
+          }
+          logs.add('Intelligent forwarding: Priority ${decision['priority']}');
+        } else {
+          logs.add('SOS forwarding disabled: ${decision['reason']}');
         }
       }
       return true;
@@ -161,5 +219,18 @@ class SosService extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+  }
+
+  Future<void> stopLiveTracking() async {
+    await trackingManager.stopTracking();
+    logs.add('Stopped live location tracking');
+    notifyListeners();
+  }
+
+  Future<void> initializeTracking() async {
+    await trackingManager.restoreTrackingState();
+    // Initialize intelligent SOS
+    await IntelligentSosService.initialize();
+    await IntelligentSosService.startMonitoring();
   }
 }

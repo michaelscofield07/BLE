@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/sos_service.dart';
 import '../services/ble_service.dart';
+import 'nearby_devices_screen.dart';
+import 'intelligent_sos_screen.dart';
 
 class SOSSreen extends StatefulWidget {
   const SOSSreen({super.key});
@@ -19,10 +21,14 @@ class _SOSSreenState extends State<SOSSreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (mounted) {
         final ble = context.read<BleService>();
         ble.startScan();
+        
+        // Initialize tracking state
+        final sos = context.read<SosService>();
+        await sos.initializeTracking();
       }
     });
   }
@@ -95,6 +101,33 @@ class _SOSSreenState extends State<SOSSreen> {
           IconButton(
             onPressed: _arming
                 ? null
+                : () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const IntelligentSosScreen(),
+                      ),
+                    );
+                  },
+            icon: const Icon(Icons.psychology, color: Colors.white),
+            tooltip: 'Intelligent SOS',
+          ),
+          IconButton(
+            onPressed: _arming
+                ? null
+                : () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const NearbyDevicesScreen(),
+                      ),
+                    );
+                  },
+            icon: const Icon(Icons.people, color: Colors.white),
+          ),
+          IconButton(
+            onPressed: _arming
+                ? null
                 : () => Navigator.pushNamed(context, '/settings'),
             icon: const Icon(Icons.settings, color: Colors.white),
           ),
@@ -132,63 +165,65 @@ class _SOSSreenState extends State<SOSSreen> {
                   ),
               ],
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
+            // Smaller SOS button
+            Center(
+              child: SizedBox(
+                width: 120,
+                height: 120,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    SizedBox(
+                      width: 120,
+                      height: 120,
+                      child: CircularProgressIndicator(
+                        value: _arming ? (5 - _remaining) / 5 : null,
+                        strokeWidth: 8,
+                        color: Colors.red[700],
+                        backgroundColor: Colors.red[100],
+                      ),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        shape: const CircleBorder(),
+                        padding: const EdgeInsets.all(24),
+                        backgroundColor:
+                            _arming ? Colors.orange : Colors.red[700],
+                        foregroundColor: Colors.white,
+                        elevation: 6,
+                      ),
+                      onPressed: _arming ? null : _startArming,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _arming ? '$_remaining' : 'SOS',
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _arming
+                                ? 'Sending in...'
+                                : 'Tap to start',
+                            style: const TextStyle(fontSize: 10),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Expanded logs section
             Expanded(
               child: SingleChildScrollView(
                 child: Column(
                   children: [
-                    Center(
-                      child: SizedBox(
-                        width: 200,
-                        height: 200,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            SizedBox(
-                              width: 200,
-                              height: 200,
-                              child: CircularProgressIndicator(
-                                value: _arming ? (5 - _remaining) / 5 : null,
-                                strokeWidth: 10,
-                                color: Colors.red[700],
-                                backgroundColor: Colors.red[100],
-                              ),
-                            ),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                shape: const CircleBorder(),
-                                padding: const EdgeInsets.all(40),
-                                backgroundColor:
-                                    _arming ? Colors.orange : Colors.red[700],
-                                foregroundColor: Colors.white,
-                                elevation: 6,
-                              ),
-                              onPressed: _arming ? null : _startArming,
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    _arming ? '$_remaining' : 'SOS',
-                                    style: const TextStyle(
-                                      fontSize: 36,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    _arming
-                                        ? 'Sending in...'
-                                        : 'Tap to start',
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
                     Card(
                       elevation: 3,
                       shape: RoundedRectangleBorder(
@@ -210,7 +245,10 @@ class _SOSSreenState extends State<SOSSreen> {
                               ],
                             ),
                             const Divider(height: 24),
-                            ...sos.logs.reversed.map((e) => Text('• $e')),
+                            ...sos.logs.reversed.map((e) => Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 2),
+                              child: Text('• $e'),
+                            )),
                           ],
                         ),
                       ),
@@ -237,7 +275,10 @@ class _SOSSreenState extends State<SOSSreen> {
                               ],
                             ),
                             const Divider(height: 24),
-                            ...ble.logs.reversed.map((e) => Text('• $e')),
+                            ...ble.logs.reversed.map((e) => Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 2),
+                              child: Text('• $e'),
+                            )),
                           ],
                         ),
                       ),
